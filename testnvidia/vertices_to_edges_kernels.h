@@ -87,9 +87,10 @@ void CTANeighborGatheringKernel(int noVertices, int* cAdjacencyList, int* rAdjac
 	BlockScan(temp_storage).ExclusiveSum(rEnd - r, neighborsBefore, total);
 	__syncthreads();
 	__shared__ volatile int blockOffset;
-	if (thid == noVertices - 1 || threadIdx.x == 255)
+	if ((thid == noVertices - 1)||( threadIdx.x == 255 && thid < noVertices))
 	{
 		blockOffset = atomicAdd(globalSeized, total);
+		printf("Total to save: %d, blockOffset: %d\n", total, blockOffset);
 	}
 	__syncthreads();
 	int ctaProgress = 0;
@@ -112,71 +113,67 @@ void CTANeighborGatheringKernel(int noVertices, int* cAdjacencyList, int* rAdjac
 }
 
 __global__
-void precountForNeighborGatheringPrefixSumKernel(int noVertices, int* rAdjacencyList, int* inVertices, int* globalVertexNeighborsBefore, int* globalSeized, int* cAdjacencyList)
+void serialNeighborGatheringPrefixSumKernel(int noVertices, int* rAdjacencyList, int* inVertices, int* globalSeized, int* cAdjacencyList, int* outEdges)
 {
 	int thid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (thid < noVertices)
 	{
-		int neighbors = 0;
 		int neighborsBefore = 0;
 		int vertex = inVertices[thid];
-		neighbors = rAdjacencyList[vertex+1] - rAdjacencyList[vertex];
+		int r = rAdjacencyList[vertex];
+		int rEnd = rAdjacencyList[vertex + 1];
 
 		typedef cub::BlockScan<int, 256, cub::BLOCK_SCAN_RAKING_MEMOIZE> BlockScan;
 		__shared__ typename BlockScan::TempStorage temp_storage;
 		__syncthreads();
-		BlockScan(temp_storage).ExclusiveSum(neighbors, neighborsBefore);
+		BlockScan(temp_storage).ExclusiveSum(rEnd - r, neighborsBefore);
 		__syncthreads();
 		__shared__ volatile int blockOffset;
 		if (thid == noVertices - 1 || threadIdx.x == 255)
 		{
-			blockOffset = atomicAdd(globalSeized, neighborsBefore + neighbors);
+			blockOffset = atomicAdd(globalSeized, neighborsBefore + rEnd - r);
 		}
 		__syncthreads();
-		globalVertexNeighborsBefore[thid] = neighborsBefore + blockOffset;
-	}
-}
-
-__global__
-void serialNeighborGatheringPrefixSumKernel(int noVertices, int* cAdjacencyList, int* rAdjacencyList, int* inVertices, int* outEdges, int* noVertexNeighborsBefore)
-{
-	int thid = blockIdx.x * blockDim.x + threadIdx.x;
-	if (thid < noVertices)
-	{
-		int vertex = inVertices[thid];
-		int queueIndex = noVertexNeighborsBefore[thid];
-		for (int offset = rAdjacencyList[vertex]; offset < rAdjacencyList[vertex + 1]; offset++)
+		int queueIndex = blockOffset + neighborsBefore;
+		for (int i = r; i < rEnd; i++)
 		{
-			outEdges[queueIndex] = cAdjacencyList[offset];
+			outEdges[queueIndex] = cAdjacencyList[i];
 			queueIndex++;
 		}
 	}
 }
 
 __global__
-void warpBasedNeighborGatheringPrefixSumKernel(int noVertices, int* cAdjacencyList, int* rAdjacencyList, int* inVertices, int* outEdges, int* noVertexNeighborsBefore)
+void warpBasedNeighborGatheringPrefixSumKernel(int noVertices, int* rAdjacencyList, int* inVertices, int* globalSeized, int* cAdjacencyList, int* outEdges)
 {
-	__shared__ volatile int command[256 / 32][4];
-	int warpId = threadIdx.x / 32;
 	int thid = blockIdx.x * blockDim.x + threadIdx.x;
+	int r = 0, rEnd = 0, neighborsBefore = 0;
+	__shared__ volatile int blockOffset;
+	if (thid < noVertices)
+	{
+		int vertex = inVertices[thid];
+		r = rAdjacencyList[vertex];
+		rEnd = rAdjacencyList[vertex + 1];
+
+		typedef cub::BlockScan<int, 256, cub::BLOCK_SCAN_RAKING_MEMOIZE> BlockScan;
+		__shared__ typename BlockScan::TempStorage temp_storage;
+		__syncthreads();
+		BlockScan(temp_storage).ExclusiveSum(rEnd - r, neighborsBefore);
+		__syncthreads();
+		if (thid == noVertices - 1 || threadIdx.x == 255)
+		{
+			blockOffset = atomicAdd(globalSeized, neighborsBefore + rEnd - r);
+		}
+	}
+	__shared__ volatile int command[256 / 32][4];
+	__syncthreads();
+	int warpId = threadIdx.x / 32;
 	if (warpId * 32 < noVertices)
 	{
-		int offsetStart, offsetEnd;
-		if (thid < noVertices)
-		{
-			int vertex = inVertices[thid];
-			offsetStart = rAdjacencyList[vertex];
-			offsetEnd = rAdjacencyList[vertex + 1];
-		}
-		else
-		{
-			offsetStart = 0;
-			offsetEnd = 0;
-		}
 		while (1)
 		{
 			command[warpId][0] = -1;
-			if (offsetEnd != 0)
+			if (rEnd != 0)
 			{
 				command[warpId][0] = threadIdx.x;
 			}
@@ -186,10 +183,10 @@ void warpBasedNeighborGatheringPrefixSumKernel(int noVertices, int* cAdjacencyLi
 			}
 			if (command[warpId][0] == threadIdx.x)
 			{
-				command[warpId][1] = offsetStart;
-				command[warpId][2] = offsetEnd;
-				command[warpId][3] = noVertexNeighborsBefore[thid];
-				offsetEnd = 0;
+				command[warpId][1] = r;
+				command[warpId][2] = rEnd;
+				command[warpId][3] = blockOffset + neighborsBefore;
+				rEnd = 0;
 			}
 			int index = command[warpId][1] + threadIdx.x % 32;
 			int adjEnd = command[warpId][2];

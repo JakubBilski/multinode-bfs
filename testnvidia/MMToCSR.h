@@ -124,7 +124,7 @@ void assemble_csr_symmetric_matrix(std::ifstream& fin, int** row_ptr, int** col_
 
 int assemble_csr_matrix(std::string filePath, int** row_ptr, int** col_ind, int* no_vertices, int* no_edges)
 {
-	printf("Loading data\n");
+	printf("Loading %s\n", filePath.substr(0, filePath.length()-4).c_str());
 	std::ifstream fileStream(filePath);
 	std::string skip;
 	std::string patternOrReal;

@@ -13,14 +13,14 @@
 
 void testSolution(int noVertices, int* d_vertexDistance)
 {
-	int kkt_powerModel[35] = { 1, 9, 73, 949, 1011, 4743, 9672, 15270, 34598, 82370, 120866, 135100, 141362, 153338,
-								168056, 162231, 136142, 108148, 99471, 105297, 113890, 116618, 97062, 74982, 56588,
-								45198, 35334, 25236, 15019, 4560, 300, 0, 0, 0, 0};
+	//int kkt_powerModel[35] = { 1, 9, 73, 949, 1011, 4743, 9672, 15270, 34598, 82370, 120866, 135100, 141362, 153338,
+	//							168056, 162231, 136142, 108148, 99471, 105297, 113890, 116618, 97062, 74982, 56588,
+	//							45198, 35334, 25236, 15019, 4560, 300, 0, 0, 0, 0};
 	//int cage10Model[25] = { 1, 4, 8, 22, 48, 85, 169, 282, 464, 728, 1082, 1599, 2130, 2301, 1274, 636, 344, 124,
-	//						64, 16, 0, 0, 0, 0 };
+	//						64, 16, 16, 0, 0, 0, 0 };
 
-	int* model = kkt_powerModel;
-	int debug_maxIteration = 35;
+	//int* model = cage10Model;
+	int debug_maxIteration = 25;
 	int* vertexDistance = (int*)malloc(noVertices * sizeof(int));
 	cudaMemcpy(vertexDistance, d_vertexDistance, noVertices * sizeof(int), cudaMemcpyDeviceToHost);
 	int* counter = (int*)malloc(sizeof(int) * debug_maxIteration);
@@ -32,7 +32,7 @@ void testSolution(int noVertices, int* d_vertexDistance)
 	{
 		if (vertexDistance[i] == INF)
 		{
-			printf("Nie odwiedzono %d\n", i);
+			//printf("Nie odwiedzono %d\n", i);
 			counter[0]++;
 		}
 		else
@@ -45,12 +45,14 @@ void testSolution(int noVertices, int* d_vertexDistance)
 	for (int i = 0; i < debug_maxIteration; i++)
 	{
 		printf("\nDistance %d: %d", i, counter[i]);
-		if (model[i] != counter[i])
-			matchWithModel = 0;
+	/*	if (model[i] != counter[i])
+			matchWithModel = 0;*/
 	}
 	printf("\n");
-	if(!matchWithModel)
-		printf("Do not match with the model!\n");
+	//if(!matchWithModel)
+	//	printf("Do not match with the model!\n");
+	//else
+	//	printf("Matches with the model!\n");
 	printf("Number of not visited vertices: %d \n", counter[0]-1);
 	free(vertexDistance);
 	free(counter);
@@ -255,14 +257,14 @@ void twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 
 		while (inCounter != 0)
 		{
+			printf("Iteration %d, vertices %d,", iteration, inCounter);
 			cudaMemset(d_seized, 0, sizeof(int));
-			precountForNeighborGatheringPrefixSumKernel << < (inCounter) / 256 + 1, 256 >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_noVertexNeighborsBefore, d_seized, d_cAdjacencyList);
-			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
-			cudaDeviceSynchronize();
 			if(selection == 3 || selection == 5)
-				serialNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_noVertexNeighborsBefore);
+				serialNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
 			else if(selection==4 || selection == 6)
-				warpBasedNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_noVertexNeighborsBefore);
+				warpBasedNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			printf("edges %d\n", edgesQueueCounter);
 			cudaMemset(d_seized, 0, sizeof(int));
 			cudaDeviceSynchronize();
 			if(selection == 3 || selection == 4)
@@ -292,14 +294,15 @@ void twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 
 		while (inCounter != 0)
 		{
+			printf("Iteration %d, vertices %d,", iteration, inCounter);
 			cudaMemset(d_seized, 0, sizeof(int));
-			precountForNeighborGatheringPrefixSumKernel << < (inCounter) / 256 + 1, 256 >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_noVertexNeighborsBefore, d_seized, d_cAdjacencyList);
-			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
-			cudaDeviceSynchronize();
 			if (selection == 7 || selection == 10)
-				serialNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_noVertexNeighborsBefore);
+				serialNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
 			else if (selection == 8 || selection == 11)
-				warpBasedNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_noVertexNeighborsBefore);
+				warpBasedNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			printf("edges %d\n", edgesQueueCounter);
 			cudaDeviceSynchronize();
 			cudaMemset(d_outCounter, 0, sizeof(int));
 			if(selection == 7 || selection == 8)
@@ -318,9 +321,11 @@ void twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 		while (inCounter != 0)
 		{
 			cudaMemset(d_outCounter, 0, sizeof(int));
+			printf("Iteration %d, %d vertices", iteration, inCounter);
 			CTANeighborGatheringKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
 			cudaDeviceSynchronize();
+			printf(", %d edges\n", inCounter);
 			cudaMemset(d_outCounter, 0, sizeof(int));
 			atomicArrayLookupKernel << <inCounter / 256 + 1, 256 >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
 			cudaDeviceSynchronize();
