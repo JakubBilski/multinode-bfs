@@ -40,7 +40,7 @@ void serialGatheringAtomicArrayKernel(int noVertices, int iteration, int* dist, 
 __global__
 void warpBasedGatheringAtomicArrayKernel(int noVertices, int iteration, int* dist, int* cAdjacencyList, int* rAdjacencyList, int* inQueue, int* outQueue, int* outCounter)
 {
-	__shared__ volatile int command[256 / 32][3];
+	__shared__ volatile int command[NO_THREADS / 32][3];
 	int warpId = threadIdx.x / 32;
 	if (warpId * 32 < noVertices)
 	{

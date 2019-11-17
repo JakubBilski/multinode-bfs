@@ -8,161 +8,51 @@
 #include "cpu_solution_selector.h"
 #include "MMToCSR.h"
 #include "scan.cuh"
+#include "nvgraph.h"
 
 typedef void(*solutionFunction)(int*, int*, int, int, int);
 
-float launchSolution(void(*solution)(int*, int*, int, int, int), int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex);
-float launchCPUSolutions(void(*solution)(int*, int*, int, int, int), int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int noTimes);
-void showUsage(std::map<std::string, solutionFunction> solutions);
-
-
-void serialAtomicOnePhaseSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	expandContractSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 1);
-}
-
-void warpBasedAtomicOnePhaseSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	expandContractSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 2);
-}
-
-void warpBasedAtomicSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 2);
-}
-
-void serialAtomicSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 1);
-}
-
-void NSquaredSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	NSquaredSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 1);
-}
-
-void serialScanSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 3);
-}
-
-void warpBasedScanSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 4);
-}
-
-void serialScanDDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 5);
-}
-
-void serialScanADDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 5);
-}
-
-void warpBasedScanDDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 6);
-}
-
-void warpBasedScanADDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 6);
-}
-
-void serialHalfScanSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 7);
-}
-
-void warpBasedHalfScanSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 8);
-}
-
-void warpBasedAtomicDDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 9);
-}
-
-void warpBasedAtomicADDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 9);
-}
-
-void serialAtomicDDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 9);
-}
-
-void serialAtomicADDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 9);
-}
-
-void serialHalfScanDDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 10);
-}
-
-void serialHalfScanADDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 10);
-}
-
-void warpBasedHalfScanDDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 11);
-}
-
-void warpBasedHalfScanADDSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 11);
-}
-
-void CTATwoPhaseSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 12);
-}
-
-void CPUSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
-{
-	CPUSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 1);
-}
+float launchSolution(SOLUTION_TYPE solution, int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex);
+float launchNvSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex);
+float launchCPUSolutions(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int noTimes);
+void showUsage(std::map<std::string, SOLUTION_TYPE> solutions);
 
 int main(int argc, char* argv[])
 {
-	std::map<std::string, solutionFunction> solutions;
+	std::map<std::string, SOLUTION_TYPE> solutions;
 
-	//cpu
-	//solutions.insert(std::make_pair("CPU", CPUSolution));
 
-	solutions.insert(std::make_pair("n_squared", NSquaredSolution));
+	solutions.insert(std::make_pair("n_squared", SOLUTION_TYPE::N_SQUARED));
 
-	solutions.insert(std::make_pair("serial_atomic_one_phase", serialAtomicOnePhaseSolution));
-	solutions.insert(std::make_pair("serial_atomic", serialAtomicSolution));
-	solutions.insert(std::make_pair("serial_atomic_add", serialAtomicADDSolution));
-	solutions.insert(std::make_pair("serial_atomic_dd", serialAtomicDDSolution));
-	solutions.insert(std::make_pair("serial_scan", serialScanSolution));
-	solutions.insert(std::make_pair("serial_scan_dd", serialScanDDSolution));
-	solutions.insert(std::make_pair("serial_scan_add", serialScanADDSolution));
-	solutions.insert(std::make_pair("serial_half_scan", serialHalfScanSolution));
-	solutions.insert(std::make_pair("serial_half_scan_dd", serialHalfScanDDSolution));
-	solutions.insert(std::make_pair("serial_half_scan_add", serialHalfScanADDSolution));
+	solutions.insert(std::make_pair("serial_atomic_one_phase", SOLUTION_TYPE::SERIAL_ATOMIC_ONE_PHASE));
+	solutions.insert(std::make_pair("serial_atomic", SOLUTION_TYPE::SERIAL_ATOMIC));
+	solutions.insert(std::make_pair("serial_atomic_add", SOLUTION_TYPE::SERIAL_ATOMIC_ADD));
+	solutions.insert(std::make_pair("serial_atomic_dd", SOLUTION_TYPE::SERIAL_ATOMIC_DD));
+	solutions.insert(std::make_pair("serial_scan", SOLUTION_TYPE::SERIAL_SCAN));
+	solutions.insert(std::make_pair("serial_scan_dd", SOLUTION_TYPE::SERIAL_SCAN_DD));
+	solutions.insert(std::make_pair("serial_scan_add", SOLUTION_TYPE::SERIAL_SCAN_ADD));
+	solutions.insert(std::make_pair("serial_half_scan", SOLUTION_TYPE::SERIAL_HALF_SCAN));
+	solutions.insert(std::make_pair("serial_half_scan_dd", SOLUTION_TYPE::SERIAL_HALF_SCAN_DD));
+	solutions.insert(std::make_pair("serial_half_scan_add", SOLUTION_TYPE::SERIAL_HALF_SCAN_ADD));
 
-	solutions.insert(std::make_pair("warp_atomic_one_phase", warpBasedAtomicSolution));
-	solutions.insert(std::make_pair("warp_atomic", warpBasedAtomicSolution));
-	solutions.insert(std::make_pair("warp_atomic_add", warpBasedAtomicADDSolution));
-	solutions.insert(std::make_pair("warp_atomic_dd", warpBasedAtomicDDSolution));
-	solutions.insert(std::make_pair("warp_scan", warpBasedScanSolution));
-	solutions.insert(std::make_pair("warp_scan_dd", warpBasedScanDDSolution));
-	solutions.insert(std::make_pair("warp_scan_add", warpBasedScanADDSolution));
-	solutions.insert(std::make_pair("warp_half_scan", warpBasedHalfScanSolution));
-	solutions.insert(std::make_pair("warp_half_scan_dd", warpBasedHalfScanDDSolution));
-	solutions.insert(std::make_pair("warp_half_scan_add", warpBasedHalfScanADDSolution));
+	solutions.insert(std::make_pair("warp_atomic_one_phase", SOLUTION_TYPE::WARP_ATOMIC_ONE_PHASE));
+	solutions.insert(std::make_pair("warp_atomic", SOLUTION_TYPE::WARP_ATOMIC));
+	solutions.insert(std::make_pair("warp_atomic_add", SOLUTION_TYPE::WARP_ATOMIC_ADD));
+	solutions.insert(std::make_pair("warp_atomic_dd", SOLUTION_TYPE::WARP_ATOMIC_DD));
+	solutions.insert(std::make_pair("warp_scan", SOLUTION_TYPE::WARP_SCAN));
+	solutions.insert(std::make_pair("warp_scan_dd", SOLUTION_TYPE::WARP_SCAN_DD));
+	solutions.insert(std::make_pair("warp_scan_add", SOLUTION_TYPE::WARP_SCAN_ADD));
+	solutions.insert(std::make_pair("warp_half_scan", SOLUTION_TYPE::WARP_HALF_SCAN));
+	solutions.insert(std::make_pair("warp_half_scan_dd", SOLUTION_TYPE::WARP_HALF_SCAN_DD));
+	solutions.insert(std::make_pair("warp_half_scan_add", SOLUTION_TYPE::WARP_HALF_SCAN_ADD));
 
-	solutions.insert(std::make_pair("CTA", CTATwoPhaseSolution));
+	solutions.insert(std::make_pair("warp_boosted", SOLUTION_TYPE::WARP_BOOSTED));
+	solutions.insert(std::make_pair("warp_boosted_dd", SOLUTION_TYPE::WARP_BOOSTED_DD));
+	solutions.insert(std::make_pair("warp_boosted_add", SOLUTION_TYPE::WARP_BOOSTED_ADD));
+
+	//solutions.insert(std::make_pair("CTA", SOLUTION_TYPE::CTA));
+	//solutions.insert(std::make_pair("CTA_dd", SOLUTION_TYPE::CTA_DD));
+	//solutions.insert(std::make_pair("CTA_add", SOLUTION_TYPE::CTA_ADD));
 
 	std::vector<std::string> chosenSolutions;
 
@@ -175,25 +65,36 @@ int main(int argc, char* argv[])
 	int* rAdjacencyList;
 	int noVertices;
 	int noEdges;
-
-	if (assemble_csr_matrix(argv[1], &rAdjacencyList, &cAdjacencyList, &noVertices, &noEdges) == -1)
-	{
-		showUsage(solutions);
-		return 0;
-	}
-	printf("Vertices: %d\n", noVertices);
-	printf("Edges: %d\n", noEdges);
 	int noTests = strtol(argv[2], NULL, 10);
-	printf("Number of tests: %d\n", noTests);
 	bool cpuSolutionTesting = false;
+	bool nvSolutionTesting = false;
 	float cpuTime = 0;
-	if (strcmp(argv[3],"--all") == 0)
+	float nvTime = 0;
+	if (strcmp(argv[3], "all") == 0)
 	{
 		for each (auto var in solutions)
 		{
 			chosenSolutions.push_back(var.first);
 		}
 		cpuSolutionTesting = true;
+		nvSolutionTesting = true;
+	}
+	else if (strcmp(argv[3], "without_scan") == 0)
+	{
+		for each (auto var in solutions)
+		{
+			if (var.first != "warp_scan" &&
+				var.first != "warp_scan_dd" &&
+				var.first != "warp_scan_add" &&
+				var.first != "serial_scan" &&
+				var.first != "serial_scan_dd" &&
+				var.first != "serial_scan_add")
+			{
+				chosenSolutions.push_back(var.first);
+			}
+		}
+		cpuSolutionTesting = true;
+		nvSolutionTesting = true;
 	}
 	else
 	{
@@ -203,14 +104,16 @@ int main(int argc, char* argv[])
 			{
 				cpuSolutionTesting = true;
 			}
+			else if (strcmp(argv[i], "nvgraph") == 0)
+			{
+				nvSolutionTesting = true;
+			}
 			else
 			{
 				auto sol = solutions.find(argv[i]);
 				if (sol == solutions.end())
 				{
 					printf("Solution %s not found \n", argv[i]);
-					free(cAdjacencyList);
-					free(rAdjacencyList);
 					showUsage(solutions);
 					return 0;
 				}
@@ -221,13 +124,21 @@ int main(int argc, char* argv[])
 			}
 		}
 	}
+	if (assemble_csr_matrix(argv[1], &rAdjacencyList, &cAdjacencyList, &noVertices, &noEdges) == -1)
+	{
+		showUsage(solutions);
+		return 0;
+	}
+	printf("Vertices: %d\n", noVertices);
+	printf("Edges: %d\n", noEdges);
+	printf("Number of tests: %d\n", noTests);
+	printf("Number of solutions: %d\n", chosenSolutions.size());
 
 	float* timeSums = (float*)malloc(sizeof(float) * chosenSolutions.size());
 	for (int i = 0; i < chosenSolutions.size(); i++)
 	{
 		timeSums[i] = 0;
 	}
-
 	printf("Running tests\n");
 #ifdef TEST_MODE
 	noTests = 1;
@@ -241,19 +152,32 @@ int main(int argc, char* argv[])
 			timeSums[index] += launchSolution(solutions[var], cAdjacencyList, rAdjacencyList, noVertices, noEdges, 0);
 			index++;
 		}
+		if (nvSolutionTesting)
+		{
+			nvTime += launchNvSolution(cAdjacencyList, rAdjacencyList, noVertices, noEdges, 0);
+		}
 		index = 0;
 	}
-	progressBar(99, 100);
+	progressBar(100, 100);
 	printf("\n");
+
 	if (cpuSolutionTesting)
 	{
 		printf("Testing CPU\n");
-		cpuTime += launchCPUSolutions(CPUSolution, cAdjacencyList, rAdjacencyList, noVertices, noEdges, 0, noTests);
+		cpuTime += launchCPUSolutions(cAdjacencyList, rAdjacencyList, noVertices, noEdges, 0, noTests);
 	}
+	printf("\n");
 	printf("\nResults\n");
+	if (nvSolutionTesting)
+	{
+		printf("%25s = %11f\n", "nvgraph", nvTime / noTests);
+	}
 	for each (std::string var in chosenSolutions)
 	{
-		printf("%25s = %11f\n", var.c_str(), timeSums[index] / noTests);
+		if(timeSums[index] >= INF)
+			printf("%25s = TIMEOUT\n", var.c_str());
+		else
+			printf("%25s = %11f\n", var.c_str(), timeSums[index] / noTests);
 		index++;
 	}
 	if (cpuSolutionTesting)
@@ -266,14 +190,20 @@ int main(int argc, char* argv[])
 }
 
 
-float launchSolution(void (*solution)(int*, int*, int, int, int), int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
+float launchSolution(SOLUTION_TYPE solution, int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
 {
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 	cudaEventRecord(start);
 
-	solution(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex);
+	int timeout=0;
+	timeout = solutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, solution);
+	if (timeout)
+	{
+		printf("Timeout\n");
+		return INF;
+	}
 
 	cudaEventRecord(stop);
 	cudaEventSynchronize(stop);
@@ -282,24 +212,66 @@ float launchSolution(void (*solution)(int*, int*, int, int, int), int* cAdjacenc
 	return milliseconds;
 }
 
-float launchCPUSolutions(void(*solution)(int*, int*, int, int, int), int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int noTimes)
+float launchCPUSolutions(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int noTimes)
 {
 	 clock_t start, end;
 	 start = clock();
 
 	 for(int i=0; i<noTimes; ++i)
-		solution(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex);
+		 CPUSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, 0);
 
 	 end = clock();
 	 return (float(1000 * (end - start))) / CLOCKS_PER_SEC;
 }
 
-void showUsage(std::map<std::string, solutionFunction> solutions)
+float launchNvSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
+{
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start);
+
+	nvgraphHandle_t handle;
+	nvgraphGraphDescr_t descrG;
+	nvgraphCSRTopology32I_t topologyData;
+	int source_vect;
+	nvgraphTraversalParameter_t params;
+	nvgraphCreate(&handle);
+	nvgraphCreateGraphDescr(handle, &descrG);
+	topologyData = (nvgraphCSRTopology32I_t)malloc(sizeof(nvgraphCSRTopology32I_st));
+	topologyData->nvertices = noVertices;
+	topologyData->nedges = noEdges;
+	topologyData->source_offsets = rAdjacencyList;
+	topologyData->destination_indices = cAdjacencyList;
+	nvgraphSetGraphStructure(handle, descrG, topologyData, NVGRAPH_CSR_32);
+	cudaDataType_t* vertex_dimT;
+	size_t distances_index = 0;
+	//size_t predecessors_index = 1;
+	vertex_dimT = (cudaDataType_t*)malloc(sizeof(cudaDataType_t));
+	vertex_dimT[distances_index] = CUDA_R_32I;
+	//vertex_dimT[predecessors_index] = CUDA_R_32I;
+	nvgraphAllocateVertexData(handle, descrG, 1, vertex_dimT);
+	nvgraphTraversalParameterInit(&params);
+	nvgraphTraversalSetDistancesIndex(&params, distances_index);
+	//nvgraphTraversalSetPredecessorsIndex(&params, predecessors_index);
+	nvgraphTraversalSetUndirectedFlag(&params, false);
+	source_vect = startingVertex;
+
+	nvgraphTraversal(handle, descrG, NVGRAPH_TRAVERSAL_BFS, &source_vect, params);
+
+	cudaEventRecord(stop);
+	cudaEventSynchronize(stop);
+	float milliseconds = 0;
+	cudaEventElapsedTime(&milliseconds, start, stop);
+	return milliseconds;
+}
+
+void showUsage(std::map<std::string, SOLUTION_TYPE> solutions)
 {
 	printf("usage:\t mybfs\t file_mtx\t number_of_tests\t solution1\t [solution2 ...]\n");
 	printf("  file_mtx is a path to the graph file in the Matrix Market format\n");
 	printf("  available solutions:\n");
-	for each (std::pair< std::string, solutionFunction> var in solutions)
+	for each (std::pair< std::string, SOLUTION_TYPE> var in solutions)
 	{
 		printf("    %s\n", var.first.c_str());
 	}

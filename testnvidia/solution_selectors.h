@@ -11,18 +11,60 @@
 #include "edges_to_vertices_kernels.h"
 #include "edges_to_edges_kernels.h"
 
-void testSolution(int noVertices, int* d_vertexDistance)
+enum SOLUTION_TYPE
 {
-	//int kkt_powerModel[35] = { 1, 9, 73, 949, 1011, 4743, 9672, 15270, 34598, 82370, 120866, 135100, 141362, 153338,
-	//							168056, 162231, 136142, 108148, 99471, 105297, 113890, 116618, 97062, 74982, 56588,
-	//							45198, 35334, 25236, 15019, 4560, 300, 0, 0, 0, 0};
-	//int cage10Model[25] = { 1, 4, 8, 22, 48, 85, 169, 282, 464, 728, 1082, 1599, 2130, 2301, 1274, 636, 344, 124,
-	//						64, 16, 16, 0, 0, 0, 0 };
+	N_SQUARED,
+	SERIAL_ATOMIC_ONE_PHASE,
+	SERIAL_ATOMIC,
+	SERIAL_ATOMIC_DD,
+	SERIAL_ATOMIC_ADD,
+	SERIAL_SCAN,
+	SERIAL_SCAN_DD,
+	SERIAL_SCAN_ADD,
+	SERIAL_HALF_SCAN,
+	SERIAL_HALF_SCAN_DD,
+	SERIAL_HALF_SCAN_ADD,
+	WARP_ATOMIC_ONE_PHASE,
+	WARP_ATOMIC,
+	WARP_ATOMIC_DD,
+	WARP_ATOMIC_ADD,
+	WARP_SCAN,
+	WARP_SCAN_DD,
+	WARP_SCAN_ADD,
+	WARP_HALF_SCAN,
+	WARP_HALF_SCAN_DD,
+	WARP_HALF_SCAN_ADD,
+	CTA,
+	CTA_DD,
+	CTA_ADD,
+	WARP_BOOSTED,
+	WARP_BOOSTED_DD,
+	WARP_BOOSTED_ADD
+};
 
-	//int* model = cage10Model;
-	int debug_maxIteration = 25;
-	int* vertexDistance = (int*)malloc(noVertices * sizeof(int));
-	cudaMemcpy(vertexDistance, d_vertexDistance, noVertices * sizeof(int), cudaMemcpyDeviceToHost);
+void testSolution(int noVertices, int* d_vertexDistance, int fromDevice=1)
+{
+	int kkt_powerModel[35] = { 1, 9, 73, 949, 1011, 4743, 9672, 15270, 34598, 82370, 120866, 135100, 141362, 153338,
+								168056, 162231, 136142, 108148, 99471, 105297, 113890, 116618, 97062, 74982, 56588,
+								45198, 35334, 25236, 15019, 4560, 300, 0, 0, 0, 0};
+	int cage10Model[25] = { 1, 4, 8, 22, 48, 85, 169, 282, 464, 728, 1082, 1599, 2130, 2301, 1274, 636, 344, 124,
+							64, 16, 16, 0, 0, 0, 0 };
+	int coPapersCiteseerModel[30] = { 1, 136, 109, 1002, 5001, 28936, 123198, 159570, 77192, 26536, 8406, 2507,
+									849, 426, 140, 55, 7, 7, 4, 4, 1, 3, 2, 3, 6, 1, 0, 0, 0, 0};
+
+	int* model = coPapersCiteseerModel;
+	int debug_maxIteration = 30;
+	int* vertexDistance;
+	if (fromDevice)
+	{
+		vertexDistance = (int*)malloc(noVertices * sizeof(int));
+		cudaMemcpy(vertexDistance, d_vertexDistance, noVertices * sizeof(int), cudaMemcpyDeviceToHost);
+	}
+	else
+	{
+		vertexDistance = d_vertexDistance;
+	}
+	
 	int* counter = (int*)malloc(sizeof(int) * debug_maxIteration);
 	for (int i = 0; i < debug_maxIteration; i++)
 	{
@@ -32,36 +74,34 @@ void testSolution(int noVertices, int* d_vertexDistance)
 	{
 		if (vertexDistance[i] == INF)
 		{
-			//printf("Nie odwiedzono %d\n", i);
 			counter[0]++;
 		}
 		else
 		{
 			counter[vertexDistance[i]]++;
 		}
-		//printf("%d: %d\t", i, vertexDistance[i]);
 	}
 	int matchWithModel = 1;
 	for (int i = 0; i < debug_maxIteration; i++)
 	{
 		printf("\nDistance %d: %d", i, counter[i]);
-	/*	if (model[i] != counter[i])
-			matchWithModel = 0;*/
+		if (model[i] != counter[i])
+			matchWithModel = 0;
 	}
 	printf("\n");
-	//if(!matchWithModel)
-	//	printf("Do not match with the model!\n");
-	//else
-	//	printf("Matches with the model!\n");
+	if(!matchWithModel)
+		printf("Do not match with the model!\n");
+	else
+		printf("Matches with the model!\n");
 	printf("Number of not visited vertices: %d \n", counter[0]-1);
 	free(vertexDistance);
 	free(counter);
 }
 
 
-
-void NSquaredSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int selection)
+int NSquaredSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int selection)
 {
+	int result = 0;
 	int* d_vertexFrontier, *d_vertexDistance;
 	int *d_cAdjacencyList, *d_rAdjacencyList;
 
@@ -79,15 +119,21 @@ void NSquaredSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 
 	int* isVertexFrontierEmpty;
 	cudaMallocManaged(&isVertexFrontierEmpty, sizeof(int));
+	if (cudaGetLastError() != cudaSuccess) return -1;
 	isVertexFrontierEmpty[0] = 0;
 	int iteration = 0;
 
 	while (isVertexFrontierEmpty[0] == 0)
 	{
 		isVertexFrontierEmpty[0] = 1;
-		NSquaredKernel << <noVertices / 256 + 1, 256 >> > (noVertices, iteration, d_vertexDistance, d_cAdjacencyList, d_rAdjacencyList, isVertexFrontierEmpty);
+		NSquaredKernel << <noVertices / NO_THREADS + 1, NO_THREADS >> > (noVertices, iteration, d_vertexDistance, d_cAdjacencyList, d_rAdjacencyList, isVertexFrontierEmpty);
 		cudaDeviceSynchronize();
 		iteration++;
+		if (cudaGetLastError() != cudaSuccess)
+		{
+			result = -1;
+			break;
+		}
 	}
 
 #ifdef TEST_MODE
@@ -99,10 +145,12 @@ void NSquaredSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 	cudaFree(d_vertexDistance);
 	cudaFree(d_cAdjacencyList);
 	cudaFree(d_rAdjacencyList);
+	return result;
 }
 
-void expandContractSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int selection)
+int expandContractSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, SOLUTION_TYPE solution)
 {
+	int result = 0;
 	int inCounter = 1;
 	int* d_outCounter;
 	int iteration = 0;
@@ -127,36 +175,50 @@ void expandContractSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, in
 	cudaMemcpy(d_cAdjacencyList, cAdjacencyList, noEdges * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(d_rAdjacencyList, rAdjacencyList, (noVertices + 1) * sizeof(int), cudaMemcpyHostToDevice);
 
-	if (selection == 1)
+	switch (solution)
+	{
+	case SOLUTION_TYPE::SERIAL_ATOMIC_ONE_PHASE:
 	{
 		while (inCounter != 0)
 		{
 			//printf("Iteration %d, vertices: %d\n", iteration, inCounter);
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			serialGatheringAtomicArrayKernel << <inCounter / 256 + 1, 256 >> > (inCounter, iteration, d_vertexDistance, d_cAdjacencyList, d_rAdjacencyList, d_inVertexQueue, d_outVertexQueue, d_outCounter);
-			cudaDeviceSynchronize();
+			serialGatheringAtomicArrayKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_cAdjacencyList, d_rAdjacencyList, d_inVertexQueue, d_outVertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
 			iteration++;
 			int* buffer = d_inVertexQueue;
 			d_inVertexQueue = d_outVertexQueue;
 			d_outVertexQueue = buffer;
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
 		}
+		break;
 	}
-	else if (selection == 2)
+	case SOLUTION_TYPE::WARP_ATOMIC_ONE_PHASE:
 	{
 		while (inCounter != 0)
 		{
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			warpBasedGatheringAtomicArrayKernel << <inCounter / 256 + 1, 256 >> > (inCounter, iteration, d_vertexDistance, d_cAdjacencyList, d_rAdjacencyList, d_inVertexQueue, d_outVertexQueue, d_outCounter);
-			cudaDeviceSynchronize();
+			warpBasedGatheringAtomicArrayKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_cAdjacencyList, d_rAdjacencyList, d_inVertexQueue, d_outVertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
 			iteration++;
 			int* buffer = d_inVertexQueue;
 			d_inVertexQueue = d_outVertexQueue;
 			d_outVertexQueue = buffer;
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
 		}
+		}
+		break;
 	}
-
+	}
 #ifdef TEST_MODE
 	testSolution(noVertices, d_vertexDistance);
 #endif
@@ -167,10 +229,12 @@ void expandContractSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, in
 	cudaFree(d_outVertexQueue);
 	cudaFree(d_cAdjacencyList);
 	cudaFree(d_rAdjacencyList);
+	return result;
 }
 
-void twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int selection)
+int twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, SOLUTION_TYPE solution)
 {
+	int result = 0;
 	int inCounter = 1;
 	int* d_outCounter;
 	int iteration = 0;
@@ -196,53 +260,70 @@ void twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 	cudaMemcpy(d_cAdjacencyList, cAdjacencyList, noEdges * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(d_rAdjacencyList, rAdjacencyList, (noVertices + 1) * sizeof(int), cudaMemcpyHostToDevice);
 
-
-	if (selection == 1)
+	switch (solution)
+	{
+	case SOLUTION_TYPE::SERIAL_ATOMIC:
 	{
 		while (inCounter != 0)
 		{
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			serialNeigborGatheringKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter, iteration);
+			serialNeigborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter, iteration);
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			cudaDeviceSynchronize();
-			atomicArrayLookupKernel << <inCounter / 256 + 1, 256 >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
-			cudaDeviceSynchronize();
+			atomicArrayLookupKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
 			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
 		}
+		break;
 	}
-	else if (selection == 2)
+	case SOLUTION_TYPE::SERIAL_ATOMIC_DD:
 	{
 		while (inCounter != 0)
 		{
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			warpBasedNeighborGatheringKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			serialNeigborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter, iteration);
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
-			cudaDeviceSynchronize();
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			atomicArrayLookupKernel << <inCounter / 256 + 1, 256 >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
-			cudaDeviceSynchronize();
-			iteration++;
+			//cudaDeviceSynchronize();
+			atomicArrayLookupDuplicateDetectionKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
 		}
+		break;
 	}
-	else if (selection == 9)
+	case SOLUTION_TYPE::SERIAL_ATOMIC_ADD:
 	{
 		while (inCounter != 0)
 		{
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			warpBasedNeighborGatheringKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			serialNeigborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter, iteration);
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
-			cudaDeviceSynchronize();
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			atomicArrayLookupADDKernel << <inCounter / 256 + 1, 256 >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
-			cudaDeviceSynchronize();
-			iteration++;
+			//cudaDeviceSynchronize();
+			atomicArrayLookupADDKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
 		}
+		break;
 	}
-	else if (selection == 3 || selection == 4 || selection == 5 || selection == 6)
+	case SOLUTION_TYPE::SERIAL_SCAN:
 	{
 		int* d_noVertexNeighborsBefore;
 		int* d_noEdgesValidsBefore;
@@ -257,31 +338,103 @@ void twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 
 		while (inCounter != 0)
 		{
-			printf("Iteration %d, vertices %d,", iteration, inCounter);
 			cudaMemset(d_seized, 0, sizeof(int));
-			if(selection == 3 || selection == 5)
-				serialNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
-			else if(selection==4 || selection == 6)
-				warpBasedNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			serialNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
 			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
-			printf("edges %d\n", edgesQueueCounter);
 			cudaMemset(d_seized, 0, sizeof(int));
-			cudaDeviceSynchronize();
-			if(selection == 3 || selection == 4)
-				precountForScanLookupKernel << < (edgesQueueCounter) / 256 + 1, 256 >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_noEdgesValidsBefore, d_seized);
-			else if(selection == 5 || selection == 6)
-				precountWithDuplicateDetectionForScanLookupKernel << < (edgesQueueCounter) / 256 + 1, 256 >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_noEdgesValidsBefore, d_seized);
+			//cudaDeviceSynchronize();
+			precountForScanLookupKernel << < (edgesQueueCounter) / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_noEdgesValidsBefore, d_seized);
 			cudaMemcpy(&inCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
-			cudaDeviceSynchronize();
-			scanLookupKernel << < edgesQueueCounter / 256 + 1, 256 >> > (edgesQueueCounter, d_edgeQueue, d_vertexQueue, d_noEdgesValidsBefore);
-			cudaDeviceSynchronize();
+			//cudaDeviceSynchronize();
+			scanLookupKernel << < edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, d_edgeQueue, d_vertexQueue, d_noEdgesValidsBefore);
+			//cudaDeviceSynchronize();
 			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
 		}
 		cudaFree(d_seized);
 		cudaFree(d_noVertexNeighborsBefore);
 		cudaFree(d_noEdgesValidsBefore);
+		break;
 	}
-	else if (selection == 7 || selection == 8 || selection == 10 || selection == 11)
+	case SOLUTION_TYPE::SERIAL_SCAN_DD:
+	{
+		int* d_noVertexNeighborsBefore;
+		int* d_noEdgesValidsBefore;
+		int* d_seized;
+
+		cudaMalloc(&d_noVertexNeighborsBefore, (noVertices * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_noEdgesValidsBefore, (noEdges * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_seized, sizeof(int));
+		cudaMemset(d_seized, 0, sizeof(int));
+
+		int edgesQueueCounter = 0;
+
+		while (inCounter != 0)
+		{
+			cudaMemset(d_seized, 0, sizeof(int));
+			serialNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemset(d_seized, 0, sizeof(int));
+			//cudaDeviceSynchronize();
+			precountWithDuplicateDetectionForScanLookupKernel << < (edgesQueueCounter) / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_noEdgesValidsBefore, d_seized);
+			cudaMemcpy(&inCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			scanLookupKernel << < edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, d_edgeQueue, d_vertexQueue, d_noEdgesValidsBefore);
+			//cudaDeviceSynchronize();
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		cudaFree(d_seized);
+		cudaFree(d_noVertexNeighborsBefore);
+		cudaFree(d_noEdgesValidsBefore);
+		break;
+	}
+	case SOLUTION_TYPE::SERIAL_SCAN_ADD:
+	{
+		int* d_noVertexNeighborsBefore;
+		int* d_noEdgesValidsBefore;
+		int* d_seized;
+
+		cudaMalloc(&d_noVertexNeighborsBefore, (noVertices * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_noEdgesValidsBefore, (noEdges * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_seized, sizeof(int));
+		cudaMemset(d_seized, 0, sizeof(int));
+
+		int edgesQueueCounter = 0;
+
+		while (inCounter != 0)
+		{
+			cudaMemset(d_seized, 0, sizeof(int));
+			serialNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemset(d_seized, 0, sizeof(int));
+			//cudaDeviceSynchronize();
+			precountWithADDForScanLookupKernel << < (edgesQueueCounter) / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_noEdgesValidsBefore, d_seized);
+			cudaMemcpy(&inCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			scanLookupKernel << < edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, d_edgeQueue, d_vertexQueue, d_noEdgesValidsBefore);
+			//cudaDeviceSynchronize();
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		cudaFree(d_seized);
+		cudaFree(d_noVertexNeighborsBefore);
+		cudaFree(d_noEdgesValidsBefore);
+		break;
+	}
+	case SOLUTION_TYPE::SERIAL_HALF_SCAN:
 	{
 		int* d_noVertexNeighborsBefore;
 		int* d_seized;
@@ -294,46 +447,492 @@ void twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 
 		while (inCounter != 0)
 		{
-			printf("Iteration %d, vertices %d,", iteration, inCounter);
 			cudaMemset(d_seized, 0, sizeof(int));
-			if (selection == 7 || selection == 10)
-				serialNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
-			else if (selection == 8 || selection == 11)
-				warpBasedNeighborGatheringPrefixSumKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
-			
+			serialNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
 			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
-			printf("edges %d\n", edgesQueueCounter);
-			cudaDeviceSynchronize();
+			//cudaDeviceSynchronize();
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			if(selection == 7 || selection == 8)
-				atomicArrayLookupKernel << <edgesQueueCounter / 256 + 1, 256 >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
-			else if(selection == 10 || selection == 11)
-				atomicArrayLookupADDKernel << <edgesQueueCounter / 256 + 1, 256 >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
-			cudaDeviceSynchronize();
+			atomicArrayLookupKernel << <edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
 			iteration++;
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
 		}
 		cudaFree(d_seized);
 		cudaFree(d_noVertexNeighborsBefore);
+		break;
 	}
-	else if (selection == 12)
+	case SOLUTION_TYPE::SERIAL_HALF_SCAN_DD:
+	{
+		int* d_noVertexNeighborsBefore;
+		int* d_seized;
+
+		cudaMalloc(&d_noVertexNeighborsBefore, (noVertices * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_seized, sizeof(int));
+		cudaMemset(d_seized, 0, sizeof(int));
+
+		int edgesQueueCounter = 0;
+
+		while (inCounter != 0)
+		{
+			cudaMemset(d_seized, 0, sizeof(int));
+			serialNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			atomicArrayLookupDuplicateDetectionKernel << <edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			iteration++;
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		cudaFree(d_seized);
+		cudaFree(d_noVertexNeighborsBefore);
+		break;
+	}
+
+	case SOLUTION_TYPE::SERIAL_HALF_SCAN_ADD:
+	{
+		int* d_noVertexNeighborsBefore;
+		int* d_seized;
+
+		cudaMalloc(&d_noVertexNeighborsBefore, (noVertices * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_seized, sizeof(int));
+		cudaMemset(d_seized, 0, sizeof(int));
+
+		int edgesQueueCounter = 0;
+
+		while (inCounter != 0)
+		{
+			cudaMemset(d_seized, 0, sizeof(int));
+			serialNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			atomicArrayLookupADDKernel << <edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			iteration++;
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		cudaFree(d_seized);
+		cudaFree(d_noVertexNeighborsBefore);
+		break;
+	}
+	case SOLUTION_TYPE::WARP_ATOMIC:
 	{
 		while (inCounter != 0)
 		{
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			printf("Iteration %d, %d vertices", iteration, inCounter);
-			CTANeighborGatheringKernel << <inCounter / 256 + 1, 256 >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			warpBasedNeighborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
-			cudaDeviceSynchronize();
-			printf(", %d edges\n", inCounter);
 			cudaMemset(d_outCounter, 0, sizeof(int));
-			atomicArrayLookupKernel << <inCounter / 256 + 1, 256 >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
-			cudaDeviceSynchronize();
+			//cudaDeviceSynchronize();
+			atomicArrayLookupKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		break;
+	}
+	case SOLUTION_TYPE::WARP_ATOMIC_DD:
+	{
+		while (inCounter != 0)
+		{
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			warpBasedNeighborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			//cudaDeviceSynchronize();
+			atomicArrayLookupDuplicateDetectionKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		break;
+	}
+	case SOLUTION_TYPE::WARP_ATOMIC_ADD:
+	{
+		while (inCounter != 0)
+		{
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			warpBasedNeighborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			//cudaDeviceSynchronize();
+			atomicArrayLookupADDKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		break;
+	}
+	case SOLUTION_TYPE::WARP_SCAN:
+	{
+		int* d_noVertexNeighborsBefore;
+		int* d_noEdgesValidsBefore;
+		int* d_seized;
+
+		cudaMalloc(&d_noVertexNeighborsBefore, (noVertices * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_noEdgesValidsBefore, (noEdges * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_seized, sizeof(int));
+		cudaMemset(d_seized, 0, sizeof(int));
+
+		int edgesQueueCounter = 0;
+
+		while (inCounter != 0)
+		{
+			cudaMemset(d_seized, 0, sizeof(int));
+			warpBasedNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemset(d_seized, 0, sizeof(int));
+			//cudaDeviceSynchronize();
+			precountForScanLookupKernel << < (edgesQueueCounter) / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_noEdgesValidsBefore, d_seized);
+			cudaMemcpy(&inCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			scanLookupKernel << < edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, d_edgeQueue, d_vertexQueue, d_noEdgesValidsBefore);
+			//cudaDeviceSynchronize();
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		cudaFree(d_seized);
+		cudaFree(d_noVertexNeighborsBefore);
+		cudaFree(d_noEdgesValidsBefore);
+		break;
+	}
+	case SOLUTION_TYPE::WARP_SCAN_DD:
+	{
+		int* d_noVertexNeighborsBefore;
+		int* d_noEdgesValidsBefore;
+		int* d_seized;
+
+		cudaMalloc(&d_noVertexNeighborsBefore, (noVertices * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_noEdgesValidsBefore, (noEdges * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_seized, sizeof(int));
+		cudaMemset(d_seized, 0, sizeof(int));
+
+		int edgesQueueCounter = 0;
+
+		while (inCounter != 0)
+		{
+			cudaMemset(d_seized, 0, sizeof(int));
+			warpBasedNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemset(d_seized, 0, sizeof(int));
+			//cudaDeviceSynchronize();
+			precountWithDuplicateDetectionForScanLookupKernel << < (edgesQueueCounter) / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_noEdgesValidsBefore, d_seized);
+			cudaMemcpy(&inCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			scanLookupKernel << < edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, d_edgeQueue, d_vertexQueue, d_noEdgesValidsBefore);
+			//cudaDeviceSynchronize();
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		cudaFree(d_seized);
+		cudaFree(d_noVertexNeighborsBefore);
+		cudaFree(d_noEdgesValidsBefore);
+		break;
+	}
+	case SOLUTION_TYPE::WARP_SCAN_ADD:
+	{
+		int* d_noVertexNeighborsBefore;
+		int* d_noEdgesValidsBefore;
+		int* d_seized;
+
+		cudaMalloc(&d_noVertexNeighborsBefore, (noVertices * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_noEdgesValidsBefore, (noEdges * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_seized, sizeof(int));
+		cudaMemset(d_seized, 0, sizeof(int));
+
+		int edgesQueueCounter = 0;
+
+		while (inCounter != 0)
+		{
+			cudaMemset(d_seized, 0, sizeof(int));
+			warpBasedNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemset(d_seized, 0, sizeof(int));
+			//cudaDeviceSynchronize();
+			precountWithADDForScanLookupKernel << < (edgesQueueCounter) / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_noEdgesValidsBefore, d_seized);
+			cudaMemcpy(&inCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			scanLookupKernel << < edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, d_edgeQueue, d_vertexQueue, d_noEdgesValidsBefore);
+			//cudaDeviceSynchronize();
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		cudaFree(d_seized);
+		cudaFree(d_noVertexNeighborsBefore);
+		cudaFree(d_noEdgesValidsBefore);
+		break;
+	}
+	case SOLUTION_TYPE::WARP_HALF_SCAN:
+	{
+		int* d_noVertexNeighborsBefore;
+		int* d_seized;
+
+		cudaMalloc(&d_noVertexNeighborsBefore, (noVertices * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_seized, sizeof(int));
+		cudaMemset(d_seized, 0, sizeof(int));
+
+		int edgesQueueCounter = 0;
+
+		while (inCounter != 0)
+		{
+			cudaMemset(d_seized, 0, sizeof(int));
+			warpBasedNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			atomicArrayLookupKernel << <edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
 			iteration++;
 			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
 		}
+		cudaFree(d_seized);
+		cudaFree(d_noVertexNeighborsBefore);
+		break;
+	}
+	case SOLUTION_TYPE::WARP_HALF_SCAN_DD:
+	{
+		int* d_noVertexNeighborsBefore;
+		int* d_seized;
+
+		cudaMalloc(&d_noVertexNeighborsBefore, (noVertices * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_seized, sizeof(int));
+		cudaMemset(d_seized, 0, sizeof(int));
+
+		int edgesQueueCounter = 0;
+
+		while (inCounter != 0)
+		{
+			cudaMemset(d_seized, 0, sizeof(int));
+			warpBasedNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			atomicArrayLookupDuplicateDetectionKernel << <edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			iteration++;
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		cudaFree(d_seized);
+		cudaFree(d_noVertexNeighborsBefore);
+		break;
+	}
+	case SOLUTION_TYPE::WARP_HALF_SCAN_ADD:
+	{
+		int* d_noVertexNeighborsBefore;
+		int* d_seized;
+
+		cudaMalloc(&d_noVertexNeighborsBefore, (noVertices * 3 + 1) * sizeof(int));
+		cudaMalloc(&d_seized, sizeof(int));
+		cudaMemset(d_seized, 0, sizeof(int));
+
+		int edgesQueueCounter = 0;
+
+		while (inCounter != 0)
+		{
+			cudaMemset(d_seized, 0, sizeof(int));
+			warpBasedNeighborGatheringPrefixSumKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_rAdjacencyList, d_vertexQueue, d_seized, d_cAdjacencyList, d_edgeQueue);
+			cudaMemcpy(&edgesQueueCounter, d_seized, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			atomicArrayLookupADDKernel << <edgesQueueCounter / NO_THREADS + 1, NO_THREADS >> > (edgesQueueCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			iteration++;
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		cudaFree(d_seized);
+		cudaFree(d_noVertexNeighborsBefore);
+		break;
+	}
+	case SOLUTION_TYPE::CTA:
+	{
+		while (inCounter != 0)
+		{
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			CTANeighborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			atomicArrayLookupKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+
+			//cudaDeviceSynchronize();
+			iteration++;
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		break;
+	}
+	case SOLUTION_TYPE::CTA_DD:
+	{
+		while (inCounter != 0)
+		{
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			CTANeighborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			atomicArrayLookupDuplicateDetectionKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+
+			//cudaDeviceSynchronize();
+			iteration++;
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		break;
+	}
+	case SOLUTION_TYPE::CTA_ADD:
+	{
+		while (inCounter != 0)
+		{
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			CTANeighborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			//cudaDeviceSynchronize();
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			atomicArrayLookupADDKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+
+			//cudaDeviceSynchronize();
+			iteration++;
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		break;
+	}
+	case SOLUTION_TYPE::WARP_BOOSTED:
+	{
+		while (inCounter != 0)
+		{
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			warpBoostedNeighborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			//cudaDeviceSynchronize();
+			atomicArrayLookupKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		break;
+	}
+	case SOLUTION_TYPE::WARP_BOOSTED_DD:
+	{
+		while (inCounter != 0)
+		{
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			warpBoostedNeighborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			//cudaDeviceSynchronize();
+			atomicArrayLookupDuplicateDetectionKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			//cudaDeviceSynchronize();
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		break;
+	}
+	case SOLUTION_TYPE::WARP_BOOSTED_ADD:
+	{
+		while (inCounter != 0)
+		{
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			warpBoostedNeighborGatheringKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, d_cAdjacencyList, d_rAdjacencyList, d_vertexQueue, d_edgeQueue, d_outCounter);
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemset(d_outCounter, 0, sizeof(int));
+			atomicArrayLookupADDKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
+			cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost);
+			iteration++;
+			if (cudaGetLastError() != cudaSuccess)
+			{
+				result = -1;
+				break;
+			}
+		}
+		break;
 	}
 
+	}
 #ifdef TEST_MODE
 	testSolution(noVertices, d_vertexDistance);
 #endif
@@ -344,4 +943,21 @@ void twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 	cudaFree(d_edgeQueue);
 	cudaFree(d_cAdjacencyList);
 	cudaFree(d_rAdjacencyList);
+	return result;
+}
+
+int solutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, SOLUTION_TYPE solution)
+{
+	if (solution == SOLUTION_TYPE::N_SQUARED)
+	{
+		return NSquaredSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, solution);
+	}
+	else if (solution == SOLUTION_TYPE::SERIAL_ATOMIC_ONE_PHASE || solution == SOLUTION_TYPE::WARP_ATOMIC_ONE_PHASE)
+	{
+		return expandContractSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, solution);
+	}
+	else
+	{
+		return twoPhaseSolutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, solution);
+	}
 }

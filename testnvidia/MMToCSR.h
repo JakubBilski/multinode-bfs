@@ -41,7 +41,7 @@ void assemble_csr_general_matrix(std::ifstream& fin, int** row_ptr, int** col_in
 				progressBar(i, L);
 		}
 	}
-	progressBar(99, 100);
+	progressBar(100, 100);
 	printf("\nFile read\n");
 	fin.close();
 	for (int i = 0; i < M; i++) {

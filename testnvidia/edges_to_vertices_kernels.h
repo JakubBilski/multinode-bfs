@@ -5,6 +5,7 @@
 __global__
 void atomicArrayLookupKernel(int noEdges, int iteration, int* dist, int* inEdges, int* outVertices, int* outCounter)
 {
+
 	//if(threadIdx.x == 0 && iteration < 4)
 	//	printf("Na wejsciu lookupu mam %d krawedzi\n", noEdges);
 	int thid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -87,7 +88,7 @@ void precountForScanLookupKernel(int noEdges, int iteration, int* dist, int* inE
 			dist[inEdges[thid]] = iteration + 1;
 			edgeValid = 1;
 		}
-		typedef cub::BlockScan<int, 256, cub::BLOCK_SCAN_RAKING_MEMOIZE> BlockScan;
+		typedef cub::BlockScan<int, NO_THREADS, cub::BLOCK_SCAN_RAKING_MEMOIZE> BlockScan;
 		// Allocate shared memory for BlockScan
 		__shared__ typename BlockScan::TempStorage temp_storage;
 		// Obtain a segment of consecutive items that are blocked across threads
@@ -142,7 +143,47 @@ void precountWithDuplicateDetectionForScanLookupKernel(int noEdges, int iteratio
 				edgeValid = 1;
 			}
 		}
-		typedef cub::BlockScan<int, 256, cub::BLOCK_SCAN_RAKING_MEMOIZE> BlockScan;
+		typedef cub::BlockScan<int, NO_THREADS, cub::BLOCK_SCAN_RAKING_MEMOIZE> BlockScan;
+		__shared__ typename BlockScan::TempStorage temp_storage;
+		__syncthreads();
+		BlockScan(temp_storage).ExclusiveSum(edgeValid, edgesValidBefore);
+		__syncthreads();
+		__shared__ volatile int blockOffset;
+		if (thid == noEdges - 1 || threadIdx.x == 255)
+		{
+			blockOffset = atomicAdd(globalSeized, edgesValidBefore + edgeValid);
+		}
+		__syncthreads();
+		if (edgeValid)
+		{
+			globalEdgesValidsBefore[thid] = edgesValidBefore + blockOffset;
+		}
+		else
+		{
+			globalEdgesValidsBefore[thid] = -1;
+		}
+	}
+}
+
+__global__
+void precountWithADDForScanLookupKernel(int noEdges, int iteration, int* dist, int* inEdges, int* globalEdgesValidsBefore, int* globalSeized)
+{
+	__shared__ volatile int scratch[32][128];
+	int thid = blockIdx.x * blockDim.x + threadIdx.x;
+	int warpid = threadIdx.x >> 5;
+	if (thid < noEdges)
+	{
+		int edgeValid = 0;
+		int edgesValidBefore = 0;
+		if (dist[inEdges[thid]] == INF)
+		{
+			int stillInf = atomicExch(&(dist[inEdges[thid]]), iteration + 1);
+			if (stillInf == INF)
+			{
+				edgeValid = 1;
+			}
+		}
+		typedef cub::BlockScan<int, NO_THREADS, cub::BLOCK_SCAN_RAKING_MEMOIZE> BlockScan;
 		__shared__ typename BlockScan::TempStorage temp_storage;
 		__syncthreads();
 		BlockScan(temp_storage).ExclusiveSum(edgeValid, edgesValidBefore);

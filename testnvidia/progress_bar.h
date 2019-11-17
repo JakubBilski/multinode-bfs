@@ -7,10 +7,10 @@ void progressBar(int a, int b)
 	int steps = 20;
 	printf("\r[");
 	for (int j = 0; j < steps; j++)
-		if (j*b < (a + 1)*steps)
+		if (j*b < a*steps)
 			printf("#");
 		else
 			printf(" ");
-	printf("] %d%%", (a + 1) * 100 / b);
+	printf("] %d%%", a * 100 / b);
 	fflush(stdout);
 }
