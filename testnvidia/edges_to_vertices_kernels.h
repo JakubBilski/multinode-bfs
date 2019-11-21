@@ -170,7 +170,6 @@ void precountWithADDForScanLookupKernel(int noEdges, int iteration, int* dist, i
 {
 	__shared__ volatile int scratch[32][128];
 	int thid = blockIdx.x * blockDim.x + threadIdx.x;
-	int warpid = threadIdx.x >> 5;
 	if (thid < noEdges)
 	{
 		int edgeValid = 0;

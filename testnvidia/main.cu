@@ -9,11 +9,12 @@
 #include "MMToCSR.h"
 #include "scan.cuh"
 #include "nvgraph.h"
+#include "tester.h"
 
 typedef void(*solutionFunction)(int*, int*, int, int, int);
 
-float launchSolution(SOLUTION_TYPE solution, int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex);
-float launchNvSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex);
+float launchSolution(SOLUTION_TYPE solution, int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int* model);
+float launchNvSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int* model);
 float launchCPUSolutions(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int noTimes);
 void showUsage(std::map<std::string, SOLUTION_TYPE> solutions);
 
@@ -50,9 +51,9 @@ int main(int argc, char* argv[])
 	solutions.insert(std::make_pair("warp_boosted_dd", SOLUTION_TYPE::WARP_BOOSTED_DD));
 	solutions.insert(std::make_pair("warp_boosted_add", SOLUTION_TYPE::WARP_BOOSTED_ADD));
 
-	//solutions.insert(std::make_pair("CTA", SOLUTION_TYPE::CTA));
-	//solutions.insert(std::make_pair("CTA_dd", SOLUTION_TYPE::CTA_DD));
-	//solutions.insert(std::make_pair("CTA_add", SOLUTION_TYPE::CTA_ADD));
+	solutions.insert(std::make_pair("CTA", SOLUTION_TYPE::CTA));
+	solutions.insert(std::make_pair("CTA_dd", SOLUTION_TYPE::CTA_DD));
+	solutions.insert(std::make_pair("CTA_add", SOLUTION_TYPE::CTA_ADD));
 
 	std::vector<std::string> chosenSolutions;
 
@@ -66,6 +67,7 @@ int main(int argc, char* argv[])
 	int noVertices;
 	int noEdges;
 	int noTests = strtol(argv[2], NULL, 10);
+	int* model;
 	bool cpuSolutionTesting = false;
 	bool nvSolutionTesting = false;
 	float cpuTime = 0;
@@ -139,6 +141,8 @@ int main(int argc, char* argv[])
 	{
 		timeSums[i] = 0;
 	}
+	printf("Creating model\n");
+	model = createModel(cAdjacencyList, rAdjacencyList, noVertices, noEdges, 0);
 	printf("Running tests\n");
 #ifdef TEST_MODE
 	noTests = 1;
@@ -149,12 +153,12 @@ int main(int argc, char* argv[])
 		progressBar(i, noTests);
 		for each (std::string var in chosenSolutions)
 		{
-			timeSums[index] += launchSolution(solutions[var], cAdjacencyList, rAdjacencyList, noVertices, noEdges, 0);
+			timeSums[index] += launchSolution(solutions[var], cAdjacencyList, rAdjacencyList, noVertices, noEdges, 0, model);
 			index++;
 		}
 		if (nvSolutionTesting)
 		{
-			nvTime += launchNvSolution(cAdjacencyList, rAdjacencyList, noVertices, noEdges, 0);
+			nvTime += launchNvSolution(cAdjacencyList, rAdjacencyList, noVertices, noEdges, 0, model);
 		}
 		index = 0;
 	}
@@ -190,25 +194,27 @@ int main(int argc, char* argv[])
 }
 
 
-float launchSolution(SOLUTION_TYPE solution, int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
+float launchSolution(SOLUTION_TYPE solution, int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int* model)
 {
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 	cudaEventRecord(start);
 
-	int timeout=0;
-	timeout = solutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, solution);
-	if (timeout)
-	{
-		printf("Timeout\n");
-		return INF;
-	}
+	int* d_dist;
+	d_dist = solutionSelector(cAdjacencyList, rAdjacencyList, noVertices, noEdges, startingVertex, solution);
 
 	cudaEventRecord(stop);
 	cudaEventSynchronize(stop);
 	float milliseconds = 0;
 	cudaEventElapsedTime(&milliseconds, start, stop);
+
+	int* dist;
+	dist = (int*)malloc(noVertices * sizeof(int));
+	gpuErrchk(cudaMemcpy(dist, d_dist, noVertices * sizeof(int), cudaMemcpyDeviceToHost));
+	if (!testSolution(noVertices, dist, model))
+		return INF;
+
 	return milliseconds;
 }
 
@@ -224,7 +230,7 @@ float launchCPUSolutions(int* cAdjacencyList, int* rAdjacencyList, int noVertice
 	 return (float(1000 * (end - start))) / CLOCKS_PER_SEC;
 }
 
-float launchNvSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex)
+float launchNvSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices, int noEdges, int startingVertex, int* model)
 {
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
@@ -232,6 +238,7 @@ float launchNvSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices,
 	cudaEventRecord(start);
 
 	nvgraphHandle_t handle;
+	int* bfs_distances_h = (int*)malloc(sizeof(int)*noVertices);
 	nvgraphGraphDescr_t descrG;
 	nvgraphCSRTopology32I_t topologyData;
 	int source_vect;
@@ -246,14 +253,11 @@ float launchNvSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices,
 	nvgraphSetGraphStructure(handle, descrG, topologyData, NVGRAPH_CSR_32);
 	cudaDataType_t* vertex_dimT;
 	size_t distances_index = 0;
-	//size_t predecessors_index = 1;
 	vertex_dimT = (cudaDataType_t*)malloc(sizeof(cudaDataType_t));
 	vertex_dimT[distances_index] = CUDA_R_32I;
-	//vertex_dimT[predecessors_index] = CUDA_R_32I;
 	nvgraphAllocateVertexData(handle, descrG, 1, vertex_dimT);
 	nvgraphTraversalParameterInit(&params);
 	nvgraphTraversalSetDistancesIndex(&params, distances_index);
-	//nvgraphTraversalSetPredecessorsIndex(&params, predecessors_index);
 	nvgraphTraversalSetUndirectedFlag(&params, false);
 	source_vect = startingVertex;
 
@@ -263,6 +267,11 @@ float launchNvSolution(int* cAdjacencyList, int* rAdjacencyList, int noVertices,
 	cudaEventSynchronize(stop);
 	float milliseconds = 0;
 	cudaEventElapsedTime(&milliseconds, start, stop);
+
+	nvgraphGetVertexData(handle, descrG, (void*)bfs_distances_h, distances_index);
+	if (!testSolution(noVertices, bfs_distances_h, model))
+		return INF;
+
 	return milliseconds;
 }
 

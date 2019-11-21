@@ -93,6 +93,7 @@
     <ClInclude Include="MMToCSR.h" />
     <ClInclude Include="progress_bar.h" />
     <ClInclude Include="solution_selectors.h" />
+    <ClInclude Include="tester.h" />
     <ClInclude Include="vertices_to_edges_kernels.h" />
     <ClInclude Include="edges_to_vertices_kernels.h" />
     <ClInclude Include="vertices_to_vertices_kernels.h" />

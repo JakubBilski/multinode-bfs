@@ -1,15 +1,11 @@
 ﻿  Compiling CUDA source file main.cu...
   
   D:\Projekty\bfs_cuda\multinode-bfs\testnvidia>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\bin\nvcc.exe" -gencode=arch=compute_35,code=\"sm_35,compute_35\" --use-local-env -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.16.27023\bin\HostX86\x64" -x cu  -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include"  -G   --keep-dir x64\Debug -maxrregcount=0  --machine 64 --compile -cudart static  -g   -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /Fdx64\Debug\vc141.pdb /FS /Zi /RTC1 /MDd " -o x64\Debug\main.cu.obj "D:\Projekty\bfs_cuda\multinode-bfs\testnvidia\main.cu" 
-d:\projekty\bfs_cuda\multinode-bfs\testnvidia\edges_to_vertices_kernels.h(173): warning : variable "warpid" was declared but never referenced
-  
-d:\projekty\bfs_cuda\multinode-bfs\testnvidia\solution_selectors.h(47): warning : variable "kkt_powerModel" was declared but never referenced
-  
-d:\projekty\bfs_cuda\multinode-bfs\testnvidia\solution_selectors.h(50): warning : variable "cage10Model" was declared but never referenced
-  
   main.cu
   device_functions.h is an internal header file and must not be used directly.  This file will be removed in a future CUDA release.  Please use cuda_runtime_api.h or cuda_runtime.h instead.
-D:/Projekty/bfs_cuda/multinode-bfs/testnvidia/main.cu(135): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 1 has type 'unsigned __int64'
-  D:/Projekty/bfs_cuda/multinode-bfs/testnvidia/main.cu(135): note: consider using '%zd' in the format string
-D:/Projekty/bfs_cuda/multinode-bfs/testnvidia/main.cu(205): warning C4305: 'return': truncation from 'int' to 'float'
+  device_functions.h is an internal header file and must not be used directly.  This file will be removed in a future CUDA release.  Please use cuda_runtime_api.h or cuda_runtime.h instead.
+D:/Projekty/bfs_cuda/multinode-bfs/testnvidia/main.cu(137): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 1 has type 'unsigned __int64'
+  D:/Projekty/bfs_cuda/multinode-bfs/testnvidia/main.cu(137): note: consider using '%zd' in the format string
+D:/Projekty/bfs_cuda/multinode-bfs/testnvidia/main.cu(215): warning C4305: 'return': truncation from 'int' to 'float'
+D:/Projekty/bfs_cuda/multinode-bfs/testnvidia/main.cu(272): warning C4305: 'return': truncation from 'int' to 'float'
   testnvidia.vcxproj -> C:\Users\Kuba\source\repos\testnvidia\x64\Debug\testnvidia.exe

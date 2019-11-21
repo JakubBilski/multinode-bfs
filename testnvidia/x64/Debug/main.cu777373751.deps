@@ -174,5 +174,6 @@ d:\projekty\bfs_cuda\multinode-bfs\testnvidia\MMToCSR.h
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\progress_bar.h
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\scan.cuh
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\solution_selectors.h
+d:\projekty\bfs_cuda\multinode-bfs\testnvidia\tester.h
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\vertices_to_edges_kernels.h
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\vertices_to_vertices_kernels.h
