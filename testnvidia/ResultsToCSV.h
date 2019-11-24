@@ -68,6 +68,10 @@ void SaveResults(char* fileName, std::string graphFileName, int noVertices, int 
 		{
 			file << "ERROR" << delimiter;
 		}
+		else if(results[i] == 0)
+		{
+			file << "NOT TESTED" << delimiter;
+		}
 		else
 		{
 			file << results[i] << delimiter;

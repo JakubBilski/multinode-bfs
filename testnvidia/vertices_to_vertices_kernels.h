@@ -20,21 +20,17 @@ void NSquaredKernel(int noVertices, int iteration, int* dist, int* cAdjacencyLis
 __global__
 void serialGatheringAtomicArrayKernel(int noVertices, int iteration, int* dist, int* cAdjacencyList, int* rAdjacencyList, int* inQueue, int* outQueue, int* outCounter)
 {
-	//printf("Outcounter na poczatku:%d\n", *outCounter);
 	if (blockIdx.x * blockDim.x + threadIdx.x < noVertices)
 	{
 		int vertex = inQueue[blockIdx.x * blockDim.x + threadIdx.x];
-		//printf("Raz\n");
 		for (int offset = rAdjacencyList[vertex]; offset < rAdjacencyList[vertex + 1]; offset++)
 		{
-			//printf("Dwa\n");
 			__syncthreads();
 			int j = cAdjacencyList[offset];
 			if (dist[j] == INF)
 			{
 				dist[j] = iteration + 1;
 				int queueIndex = atomicAdd(outCounter, 1);
-				//printf("Outcounter:%d\n", queueIndex);
 				outQueue[queueIndex] = j;
 			}
 		}
