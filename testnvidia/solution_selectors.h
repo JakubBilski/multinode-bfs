@@ -2,7 +2,6 @@
 #include <assert.h>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
-#include <device_functions.h>
 #include <cuda_runtime.h>
 #include <stdio.h>
 
@@ -73,13 +72,8 @@ int* NSquaredSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 		iteration++;
 	}
 
-#ifdef TEST_MODE
-	testSolution(noVertices, d_vertexDistance);
-#endif
-
 	gpuErrchk(cudaFree(isVertexFrontierEmpty));
 	gpuErrchk(cudaFree(d_vertexFrontier));
-	//cudaFree(d_vertexDistance);
 	gpuErrchk(cudaFree(d_cAdjacencyList));
 	gpuErrchk(cudaFree(d_rAdjacencyList));
 	return d_vertexDistance;
@@ -104,7 +98,7 @@ int* expandContractSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, in
 	int *d_cAdjacencyList;
 	int *d_rAdjacencyList;
 	gpuErrchk(cudaMalloc(&d_inVertexQueue, noVertices * sizeof(int)));
-	gpuErrchk(cudaMalloc(&d_outVertexQueue, noVertices * sizeof(int)));
+	gpuErrchk(cudaMalloc(&d_outVertexQueue, noEdges * sizeof(int)));
 	gpuErrchk(cudaMemcpy(d_inVertexQueue, &startingVertex, sizeof(int), cudaMemcpyHostToDevice));
 	gpuErrchk(cudaMalloc(&d_cAdjacencyList, noEdges * sizeof(int)));
 	gpuErrchk(cudaMalloc(&d_rAdjacencyList, (noVertices + 1) * sizeof(int)));
@@ -144,9 +138,6 @@ int* expandContractSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, in
 		break;
 	}
 	}
-#ifdef TEST_MODE
-	testSolution(noVertices, d_vertexDistance);
-#endif
 
 	gpuErrchk(cudaFree(d_outCounter));
 	gpuErrchk(cudaFree(d_inVertexQueue));
@@ -235,12 +226,9 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 	}
 	case SOLUTION_TYPE::SERIAL_SCAN:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_noEdgesValidsBefore;
 		int* d_seized;
-
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
-		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges + 1) * sizeof(int)));
+		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges*3 + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -261,18 +249,14 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			iteration++;
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		gpuErrchk(cudaFree(d_noEdgesValidsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::SERIAL_SCAN_DD:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_noEdgesValidsBefore;
 		int* d_seized;
-
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
-		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges + 1) * sizeof(int)));
+		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges*2 + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -293,18 +277,14 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			iteration++;
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		gpuErrchk(cudaFree(d_noEdgesValidsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::SERIAL_SCAN_ADD:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_noEdgesValidsBefore;
 		int* d_seized;
-
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
-		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges + 1) * sizeof(int)));
+		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges*2 + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -325,16 +305,12 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			iteration++;
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		gpuErrchk(cudaFree(d_noEdgesValidsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::SERIAL_HALF_SCAN:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_seized;
-
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -353,15 +329,11 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			gpuErrchk(cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost));
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::SERIAL_HALF_SCAN_DD:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_seized;
-
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -380,16 +352,12 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			gpuErrchk(cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost));
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		break;
 	}
 
 	case SOLUTION_TYPE::SERIAL_HALF_SCAN_ADD:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_seized;
-
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -408,7 +376,6 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			gpuErrchk(cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost));
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::WARP_ATOMIC:
@@ -420,10 +387,8 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			gpuErrchk(cudaPeekAtLastError());
 			gpuErrchk(cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost));
 			gpuErrchk(cudaMemset(d_outCounter, 0, sizeof(int)));
-			//cudaDeviceSynchronize();
 			atomicArrayLookupKernel << <inCounter / NO_THREADS + 1, NO_THREADS >> > (inCounter, iteration, d_vertexDistance, d_edgeQueue, d_vertexQueue, d_outCounter);
 			gpuErrchk(cudaPeekAtLastError());
-			//cudaDeviceSynchronize();
 			gpuErrchk(cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost));
 			iteration++;
 		}
@@ -463,12 +428,10 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 	}
 	case SOLUTION_TYPE::WARP_SCAN:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_noEdgesValidsBefore;
 		int* d_seized;
 
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
-		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges + 1) * sizeof(int)));
+		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges*3 + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -489,18 +452,15 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			iteration++;
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		gpuErrchk(cudaFree(d_noEdgesValidsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::WARP_SCAN_DD:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_noEdgesValidsBefore;
 		int* d_seized;
 
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
-		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges + 1) * sizeof(int)));
+		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges*2 + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -521,18 +481,15 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			iteration++;
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		gpuErrchk(cudaFree(d_noEdgesValidsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::WARP_SCAN_ADD:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_noEdgesValidsBefore;
 		int* d_seized;
 
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
-		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges + 1) * sizeof(int)));
+		gpuErrchk(cudaMalloc(&d_noEdgesValidsBefore, (noEdges*2 + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -553,16 +510,12 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			iteration++;
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		gpuErrchk(cudaFree(d_noEdgesValidsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::WARP_HALF_SCAN:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_seized;
-
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -581,15 +534,11 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			gpuErrchk(cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost));
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::WARP_HALF_SCAN_DD:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_seized;
-
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -608,15 +557,11 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			gpuErrchk(cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost));
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::WARP_HALF_SCAN_ADD:
 	{
-		int* d_noVertexNeighborsBefore;
 		int* d_seized;
-
-		gpuErrchk(cudaMalloc(&d_noVertexNeighborsBefore, (noVertices + 1) * sizeof(int)));
 		gpuErrchk(cudaMalloc(&d_seized, sizeof(int)));
 		gpuErrchk(cudaMemset(d_seized, 0, sizeof(int)));
 
@@ -635,7 +580,6 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 			gpuErrchk(cudaMemcpy(&inCounter, d_outCounter, sizeof(int), cudaMemcpyDeviceToHost));
 		}
 		gpuErrchk(cudaFree(d_seized));
-		gpuErrchk(cudaFree(d_noVertexNeighborsBefore));
 		break;
 	}
 	case SOLUTION_TYPE::CTA:
@@ -734,11 +678,7 @@ int* twoPhaseSolutionSelector(int* cAdjacencyList, int* rAdjacencyList, int noVe
 		}
 		break;
 	}
-
 	}
-#ifdef TEST_MODE
-	testSolution(noVertices, d_vertexDistance);
-#endif
 
 	gpuErrchk(cudaFree(d_outCounter));
 	gpuErrchk(cudaFree(d_vertexQueue));

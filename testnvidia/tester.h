@@ -2,7 +2,6 @@
 #include <assert.h>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
-#include <device_functions.h>
 #include <cuda_runtime.h>
 #include <stdio.h>
 
@@ -19,8 +18,6 @@ int testSolution(int noVertices, int* vertexDistance, int* model)
 			break;
 		}
 	}
-	if(!matchWithModel)
-		printf("Do not match with the model!\n");
 	free(vertexDistance);
 	return matchWithModel;
 }

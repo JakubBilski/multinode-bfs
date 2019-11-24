@@ -92,6 +92,7 @@
     <ClInclude Include="cpu_solution_selector.h" />
     <ClInclude Include="MMToCSR.h" />
     <ClInclude Include="progress_bar.h" />
+    <ClInclude Include="ResultsToCSV.h" />
     <ClInclude Include="solution_selectors.h" />
     <ClInclude Include="tester.h" />
     <ClInclude Include="vertices_to_edges_kernels.h" />

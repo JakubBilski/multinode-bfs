@@ -20,17 +20,21 @@ void NSquaredKernel(int noVertices, int iteration, int* dist, int* cAdjacencyLis
 __global__
 void serialGatheringAtomicArrayKernel(int noVertices, int iteration, int* dist, int* cAdjacencyList, int* rAdjacencyList, int* inQueue, int* outQueue, int* outCounter)
 {
+	//printf("Outcounter na poczatku:%d\n", *outCounter);
 	if (blockIdx.x * blockDim.x + threadIdx.x < noVertices)
 	{
 		int vertex = inQueue[blockIdx.x * blockDim.x + threadIdx.x];
-
+		//printf("Raz\n");
 		for (int offset = rAdjacencyList[vertex]; offset < rAdjacencyList[vertex + 1]; offset++)
 		{
+			//printf("Dwa\n");
+			__syncthreads();
 			int j = cAdjacencyList[offset];
 			if (dist[j] == INF)
 			{
 				dist[j] = iteration + 1;
 				int queueIndex = atomicAdd(outCounter, 1);
+				//printf("Outcounter:%d\n", queueIndex);
 				outQueue[queueIndex] = j;
 			}
 		}
@@ -59,7 +63,6 @@ void warpBasedGatheringAtomicArrayKernel(int noVertices, int iteration, int* dis
 		while (1)
 		{
 			command[warpId][0] = -1;
-			//try to command the warp
 			if (offsetEnd != 0)
 			{
 				command[warpId][0] = threadIdx.x;
@@ -68,24 +71,21 @@ void warpBasedGatheringAtomicArrayKernel(int noVertices, int iteration, int* dis
 			{
 				break;
 			}
-			//if you suceeded, give orders to the warp
 			if (command[warpId][0] == threadIdx.x)
 			{
 				command[warpId][1] = offset;
 				command[warpId][2] = offsetEnd;
 				offsetEnd = 0;
 			}
-			//strip-mine the commander's adjacency list
-
-			int index = command[warpId][1] + threadIdx.x % 32;
+			volatile int index = command[warpId][1] + threadIdx.x % 32;
 			int adjEnd = command[warpId][2];
 			while (index < adjEnd)
 			{
-				int j = cAdjacencyList[index];
+				volatile int j = cAdjacencyList[index];
 				if (dist[j] == INF)
 				{
 					dist[j] = iteration + 1;
-					int queueIndex = atomicAdd(outCounter, 1);
+					volatile int queueIndex = atomicAdd(outCounter, 1);
 					outQueue[queueIndex] = j;
 				}
 				index += 32;

@@ -5,20 +5,13 @@
 __global__
 void atomicArrayLookupKernel(int noEdges, int iteration, int* dist, int* inEdges, int* outVertices, int* outCounter)
 {
-
-	//if(threadIdx.x == 0 && iteration < 4)
-	//	printf("Na wejsciu lookupu mam %d krawedzi\n", noEdges);
 	int thid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (thid < noEdges)
 	{
-		//if (iteration < 4)
-			//printf("Odleglosc do wierzcholka %d: %d\n", inEdges[blockIdx.x * blockDim.x + threadIdx.x], dist[inEdges[blockIdx.x * blockDim.x + threadIdx.x]]);
 		if (dist[inEdges[thid]] == INF)
 		{
 			dist[inEdges[thid]] = iteration + 1;
 			int queueIndex = atomicAdd(outCounter, 1);
-			//if(iteration == 5)
-			//	printf("Zapisuje krawedz %d jako wierzcholek\n", inEdges[blockIdx.x * blockDim.x + threadIdx.x]);
 			outVertices[queueIndex] = inEdges[thid];
 		}
 	}
@@ -89,18 +82,14 @@ void precountForScanLookupKernel(int noEdges, int iteration, int* dist, int* inE
 			edgeValid = 1;
 		}
 		typedef cub::BlockScan<int, NO_THREADS, cub::BLOCK_SCAN_RAKING_MEMOIZE> BlockScan;
-		// Allocate shared memory for BlockScan
 		__shared__ typename BlockScan::TempStorage temp_storage;
-		// Obtain a segment of consecutive items that are blocked across threads
-		// Collectively compute the block-wide exclusive prefix sum
 		__syncthreads();
 		BlockScan(temp_storage).ExclusiveSum(edgeValid, edgesValidBefore);
 		__syncthreads();
 		__shared__ volatile int blockOffset;
-		if (thid == noEdges - 1 || threadIdx.x == 255)
+		if (thid == noEdges - 1 || threadIdx.x == NO_THREADS-1)
 		{
 			blockOffset = atomicAdd(globalSeized, edgesValidBefore + edgeValid);
-			//printf("Zwiekszylem globalSeized od %d do %d\n", blockOffset, blockOffset + edgesValidBefore + edgeValid);
 		}
 		__syncthreads();
 		if (edgeValid)
@@ -149,7 +138,7 @@ void precountWithDuplicateDetectionForScanLookupKernel(int noEdges, int iteratio
 		BlockScan(temp_storage).ExclusiveSum(edgeValid, edgesValidBefore);
 		__syncthreads();
 		__shared__ volatile int blockOffset;
-		if (thid == noEdges - 1 || threadIdx.x == 255)
+		if (thid == noEdges - 1 || threadIdx.x == NO_THREADS-1)
 		{
 			blockOffset = atomicAdd(globalSeized, edgesValidBefore + edgeValid);
 		}
@@ -188,7 +177,7 @@ void precountWithADDForScanLookupKernel(int noEdges, int iteration, int* dist, i
 		BlockScan(temp_storage).ExclusiveSum(edgeValid, edgesValidBefore);
 		__syncthreads();
 		__shared__ volatile int blockOffset;
-		if (thid == noEdges - 1 || threadIdx.x == 255)
+		if (thid == noEdges - 1 || threadIdx.x == NO_THREADS-1)
 		{
 			blockOffset = atomicAdd(globalSeized, edgesValidBefore + edgeValid);
 		}
@@ -212,9 +201,6 @@ void scanLookupKernel(int noEdges, int* inEdges, int* outVertices, int* noEdgesV
 	{
 		if (noEdgesValidsBefore[thid] != -1)
 		{
-			//if(iteration == 5)
-			//	printf("Zapisuje krawedz %d jako wierzcholek\n", inEdges[blockIdx.x * blockDim.x + threadIdx.x]);
-			//printf("Zapisuje do kolejki wierzcholkow %d na miejsce %d\n", inEdges[thid], noEdgesValidsBefore[thid]);
 			outVertices[noEdgesValidsBefore[thid]] = inEdges[thid];
 		}
 	}
