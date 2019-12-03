@@ -103,7 +103,7 @@ int main(int argc, char* argv[])
 	for (int i = 0; i < noTests; i++)
 	{
 		progressBar(i, noTests);
-		for each (std::string var in chosenSolutions)
+		for (std::string var: chosenSolutions)
 		{
 			if (errorEncountered[(int)solutions[var]])
 				continue;
@@ -129,7 +129,7 @@ int main(int argc, char* argv[])
 		cpuTime += launchCPUSolutions(cAdjacencyList, rAdjacencyList, noVertices, noEdges, 0, noTests);
 	}
 
-	for each (std::string var in chosenSolutions)
+	for (std::string var : chosenSolutions)
 	{
 		timeSums[(int)solutions[var]] /= noTests;
 	}
@@ -144,7 +144,7 @@ int main(int argc, char* argv[])
 	{
 		printf("%25s = %11f\n", "nvgraph", nvTime);
 	}
-	for each (std::string var in chosenSolutions)
+	for (std::string var : chosenSolutions)
 	{
 		if(errorEncountered[(int)solutions[var]])
 			printf("%25s = ERROR\n", var.c_str());
@@ -256,7 +256,7 @@ void showUsage(std::vector<std::string> solutionNames)
 	printf("usage:\t mybfs\t file_mtx\t number_of_tests\t solution1\t [solution2 ...]\n");
 	printf("  file_mtx is a path to the graph file in the Matrix Market format\n");
 	printf("  available solutions:\n");
-	for each (auto var in solutionNames)
+	for (auto & var : solutionNames)
 	{
 		printf("    %s\n", var.c_str());
 	}
@@ -267,7 +267,7 @@ std::vector<std::string> GetChosenSolutions(int argc, char** argv, std::map<std:
 	std::vector<std::string> chosenSolutions;
 	if (strcmp(argv[4], "all") == 0)
 	{
-		for each (auto var in solutions)
+		for (auto var : solutions)
 		{
 			chosenSolutions.push_back(var.first);
 		}
@@ -276,7 +276,7 @@ std::vector<std::string> GetChosenSolutions(int argc, char** argv, std::map<std:
 	}
 	else if (strcmp(argv[4], "without_scan") == 0)
 	{
-		for each (auto var in solutions)
+		for (auto var : solutions)
 		{
 			if (var.first != "warp_scan" &&
 				var.first != "warp_scan_dd" &&
@@ -293,7 +293,7 @@ std::vector<std::string> GetChosenSolutions(int argc, char** argv, std::map<std:
 	}
 	else if (strcmp(argv[4], "without_CTA") == 0)
 	{
-		for each (auto var in solutions)
+		for (auto var : solutions)
 		{
 			if (var.first != "CTA" &&
 				var.first != "CTA_dd" &&
@@ -307,7 +307,7 @@ std::vector<std::string> GetChosenSolutions(int argc, char** argv, std::map<std:
 	}
 	else if (strcmp(argv[4], "test_here") == 0)
 	{
-		for each (auto var in solutions)
+		for (auto var : solutions)
 		{
 			if (var.first != "warp_scan" &&
 				var.first != "warp_scan_dd" &&
