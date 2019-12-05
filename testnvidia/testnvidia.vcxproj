@@ -88,7 +88,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="defines.h" />
-    <ClInclude Include="edges_to_edges_kernels.h" />
     <ClInclude Include="cpu_solution_selector.h" />
     <ClInclude Include="MMToCSR.h" />
     <ClInclude Include="progress_bar.h" />

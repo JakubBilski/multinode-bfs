@@ -171,13 +171,11 @@ d:\projekty\bfs_cuda\multinode-bfs\testnvidia\cub\warp\specializations\..\..\thr
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\cub\warp\specializations\warp_scan_shfl.cuh
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\cub\warp\specializations\warp_scan_smem.cuh
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\defines.h
-d:\projekty\bfs_cuda\multinode-bfs\testnvidia\edges_to_edges_kernels.h
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\edges_to_vertices_kernels.h
 D:\Projekty\bfs_cuda\multinode-bfs\testnvidia\main.cu
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\MMToCSR.h
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\progress_bar.h
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\ResultsToCSV.h
-d:\projekty\bfs_cuda\multinode-bfs\testnvidia\scan.cuh
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\solution_selectors.h
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\tester.h
 d:\projekty\bfs_cuda\multinode-bfs\testnvidia\vertices_to_edges_kernels.h
