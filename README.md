@@ -8,7 +8,8 @@ My own take on implementing a couple of breadth-first search traversal algorithm
 
 I followed the example of Duane Merrill and Michael Garland's paper  
 https://research.nvidia.com/publication/scalable-gpu-graph-traversal  
-However, as this is a purely educational project, I wrote my own version of algorithms
+However, as this is a purely educational project, I wrote my own version of algorithms  
+I also utilized tools that weren't available when the paper above was created, namely [warp-level primitives](https://devblogs.nvidia.com/using-cuda-warp-level-primitives/), and performed an efficiency test
 
 ## Contents
 
